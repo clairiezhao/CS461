@@ -3,9 +3,11 @@ import math
 import numpy as np
 from sklearn.inspection import DecisionBoundaryDisplay
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.model_selection import StratifiedKFold
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import pandas as pd
 
 # For repeatability
 np.random.seed(100)
@@ -234,30 +236,70 @@ def fitAndPlot(X, y, degree, use_cross, l2, l1, epochs, lr):
     # Use one of the diverging maps (https://matplotlib.org/stable/users/explain/colors/colormaps.html)
     ax.contour(xx, yy, Z, cmap=mpl.colormaps['coolwarm'], alpha=0.8)
 
-    title_str = f"degree {degree} fit, use cross={args.use_cross},\nl2={l2}, l1={l1}, accuracy={accuracy}"
+    title_str = f"degree {degree} fit, use cross={use_cross},\nl2={l2}, l1={l1}, accuracy={accuracy}"
 
     plt.title(title_str, fontsize=20)
-    plt.savefig(f"degree_{degree}_fit_l2_{l2}_l1_{l1}_use_cross_{args.use_cross}.svg", dpi=2*96)
+    plt.savefig(f"degree_{degree}_fit_l2_{l2}_l1_{l1}_use_cross_{use_cross}.svg", dpi=2*96)
     #plt.show()
     plt.clf()
 
 # TODO
 # This is where you should insert your cross validation algorithm.
-use_cross = False
-l2 = 0.0
-l1 = 0.0
-degree = 1
+# split into N batches, for batch in batches use as holdout set
+# def cross validation, returns hyperparameters
+# y: n rows, 1 col
+# X: n rows, 2 col
+
+def cross_validate(X, y, epochs, lr):
+    N_FOLDS = 5
+    # splits the data preserving class weights
+    splits = list(StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=461).split(X, y))
+    USE_CROSS_LIST = [True, False]
+    L2_LIST = [0.0, 0.1, 1.0]
+    L1_LIST = [0.0, 0.1, 1.0]
+    DEGREE_LIST = [1, 2, 3]
+    comparison_rows = []
+    for use_cross in USE_CROSS_LIST:
+        for l2 in L2_LIST:
+            for l1 in L1_LIST:
+                for deg in DEGREE_LIST:
+                    settings = {"degree": deg, "cross_features": use_cross, "l1": l1, "l2": l2}
+                    for fold, (train_idx, val_idx) in enumerate(splits, start=1):
+                        model = LogisticRegressor(**settings, epochs=epochs, learning_rate=lr)
+                        model.fit(X[train_idx].T, y[train_idx])
+                        val_p = model.decision_function(X[val_idx])
+                        comparison_rows.append({**settings, "Fold": fold,
+                            "Validation accuracy": np.mean((val_p >= .5) == y[val_idx]),
+                            "Validation BCE": cross_entropy_loss(val_p, y[val_idx])})
+    comparison_scores = pd.DataFrame(comparison_rows)
+    comparison_summary = comparison_scores.groupby(["cross_features", "l2", "l1", "degree"], as_index=False).agg(
+        mean_validation_accuracy=("Validation accuracy", "mean"),
+        std_validation_accuracy=("Validation accuracy", "std"),
+        mean_validation_bce=("Validation BCE", "mean"))
+
+    # Selection uses unrounded validation means, never the reserved test results.
+    # An exact tie keeps the first row (lower degree, then lower L2 in this table).
+    best_row = comparison_summary.loc[comparison_summary.mean_validation_accuracy.idxmax()]
+    selected_config = {"degree": int(best_row.degree), "cross_features": bool(best_row.cross_features),
+                    "l1": float(best_row.l1), "l2": float(best_row.l2), "accuracy": comparison_summary.mean_validation_accuracy.max()}
+    return selected_config
+
 
 # Analyze and plot.
 if args.plot_data:
+    use_cross = False
+    l2 = 0.2
+    l1 = 0.0
+    degree = 1
     plt.subplots(figsize=(8,6))
     fitAndPlot(X, y, degree, use_cross, l2, l1, args.epochs, args.lr)
 else:
-    clf = LogisticRegressor(degree=degree, cross_features=use_cross, l2=l2, l1=l1, epochs=args.epochs, learning_rate=args.lr)
+    '''clf = LogisticRegressor(degree=degree, cross_features=use_cross, l2=l2, l1=l1, epochs=args.epochs, learning_rate=args.lr)
     clf.fit(X.T, y)
     y_hat = clf.predict(X)
     matches = np.sum(y_hat == y)
     accuracy = matches/y.shape[0]
-    print(f"Accuracy is {accuracy}")
-
-print(f"{use_cross}, {l2}, {l1}, {degree}")
+    print(f"Accuracy is {accuracy}")'''
+    selected_config = cross_validate(X, y, args.epochs, args.lr)
+    print(f"{selected_config["cross_features"]}, {selected_config["l2"]}, {selected_config["l1"]}, {selected_config["degree"]}")
+    print(f"accuracy: {selected_config["accuracy"]}")

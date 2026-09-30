@@ -54,7 +54,6 @@ def getData(path):
     return X, y
 
 X, y = getData(args.load_csv)
-print(f"Sizes are {X.shape} and {y.shape}")
 # Shuffle the data
 #reorder = np.arange(y.shape[0])
 #np.random.shuffle(reorder)
@@ -212,7 +211,7 @@ class LogisticRegressor(BaseEstimator, ClassifierMixin):
 
 def fitAndPlot(X, y, degree, use_cross, l2, l1, epochs, lr):
 
-    clf = LogisticRegressor(degree=degree, cross_features=True, l2=l2, l1=l1, epochs=epochs, learning_rate=lr)
+    clf = LogisticRegressor(degree=degree, cross_features=use_cross, l2=l2, l1=l1, epochs=epochs, learning_rate=lr)
     clf.fit(X.T, y)
     y_hat = clf.predict(X)
     matches = np.sum(y_hat == y)
@@ -255,8 +254,8 @@ def cross_validate(X, y, epochs, lr):
     # splits the data preserving class weights
     splits = list(StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=461).split(X, y))
     USE_CROSS_LIST = [True, False]
-    L2_LIST = [0.0, 0.1, 1.0]
-    L1_LIST = [0.0, 0.1, 1.0]
+    L2_LIST = [0.0, 0.1, 0.5, 1.0, 1.5]
+    L1_LIST = [0.0, 0.1, 0.5, 1.0, 1.5]
     DEGREE_LIST = [1, 2, 3]
     comparison_rows = []
     for use_cross in USE_CROSS_LIST:
@@ -285,21 +284,15 @@ def cross_validate(X, y, epochs, lr):
     return selected_config
 
 
+selected_config = cross_validate(X, y, args.epochs, args.lr)
+print(f"{selected_config["cross_features"]}, {selected_config["l2"]}, {selected_config["l1"]}, {selected_config["degree"]}")
+print(f"Mean cross-validation accuracy: {selected_config["accuracy"]}")
+
 # Analyze and plot.
 if args.plot_data:
-    use_cross = False
-    l2 = 0.2
-    l1 = 0.0
-    degree = 1
+    use_cross = selected_config["cross_features"]
+    l2 = selected_config["l2"]
+    l1 = selected_config["l1"]
+    degree = selected_config["degree"]
     plt.subplots(figsize=(8,6))
     fitAndPlot(X, y, degree, use_cross, l2, l1, args.epochs, args.lr)
-else:
-    '''clf = LogisticRegressor(degree=degree, cross_features=use_cross, l2=l2, l1=l1, epochs=args.epochs, learning_rate=args.lr)
-    clf.fit(X.T, y)
-    y_hat = clf.predict(X)
-    matches = np.sum(y_hat == y)
-    accuracy = matches/y.shape[0]
-    print(f"Accuracy is {accuracy}")'''
-    selected_config = cross_validate(X, y, args.epochs, args.lr)
-    print(f"{selected_config["cross_features"]}, {selected_config["l2"]}, {selected_config["l1"]}, {selected_config["degree"]}")
-    print(f"accuracy: {selected_config["accuracy"]}")

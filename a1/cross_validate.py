@@ -254,9 +254,9 @@ def cross_validate(X, y, epochs, lr):
     # splits the data preserving class weights
     splits = list(StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=461).split(X, y))
     USE_CROSS_LIST = [True, False]
-    L2_LIST = [0.0, 0.1, 0.5, 1.0, 1.1, 1.5]
-    L1_LIST = [0.0, 0.1, 0.5, 1.0, 1.1, 1.5]
-    DEGREE_LIST = [1, 2, 3]
+    L2_LIST = [0.0, 0.1, 0.5, 1.0, 1.5, 2.0]
+    L1_LIST = [0.0, 0.1, 0.5, 1.0, 1.5, 2.0]
+    DEGREE_LIST = [1, 2, 3, 4]
     comparison_rows = []
     for use_cross in USE_CROSS_LIST:
         for l2 in L2_LIST:
